@@ -19,6 +19,37 @@ Pair-wise GSB 标注任务仓库（第 17 批 / 277）。
 ./mvnw -q verify
 ```
 
+## 框架用法
+
+核心 API 位于 `com.example.contract` 包：
+
+```java
+// 1. 定义契约用例（输入 + 预期输出 / 预期异常）并组成带版本的契约
+Contract<String, String> contract = new Contract<>("text-normalizer", 1, List.of(
+        ContractCase.expectingOutput("trims-whitespace", "  hello  ", "hello"),
+        ContractCase.expectingException("null-input-throws-npe", null, NullPointerException.class)));
+
+// 2. 注册契约与多个实现（任意实现类通过方法引用适配）
+ContractRegistry registry = new ContractRegistry();
+registry.registerContract(contract);
+registry.registerImplementation("text-normalizer",
+        Implementation.of("trim", new TrimNormalizer()::normalize));
+registry.registerImplementation("text-normalizer",
+        Implementation.of("strip", new StripNormalizer()::normalize));
+
+// 3. 自动对全部实现跑全部契约用例，失败定位到具体用例
+List<ContractExecution> executions = registry.verifyAll();
+
+// 4. 覆盖报告：漏测（MISSING）、版本过期（STALE）、通过/失败/未执行数、
+//    跨实现一致性（同一输入异常类型或输出不一致）与统计信息
+CoverageReport report = registry.report();
+System.out.println(report.summary());
+```
+
+- 契约变更后用 `registry.registerContract(contract.withVersion(2))` 升级版本，
+  之前按旧版本验证过的实现会在报告中标记为 `STALE`。
+- `report.statistics()` 提供契约数、实现数、执行组合数与不满足项总数。
+
 ## 任务提示词
 
 以下为本题完整的 User Prompt 原文，两次执行必须使用完全相同的文本。
