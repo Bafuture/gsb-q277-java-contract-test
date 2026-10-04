@@ -30,3 +30,41 @@ Pair-wise GSB 标注任务仓库（第 17 批 / 277）。
 1. 在本仓库中完成提示词要求的全部内容。
 2. `./mvnw -q verify` 必须通过。
 3. 完成后在所属分支（A 或 B）上提交，产物快照的父提交必须是初始环境快照。
+
+---
+
+## 框架使用说明（本次实现）
+
+核心代码位于 `src/main/java/com/example/contract/`：
+
+| 类 | 作用 |
+|----|------|
+| `Contract` / `ContractCase` / `Expectation` | 定义契约：名称、版本、用例（输入 + 预期值或预期异常类型），可复用于多个实现 |
+| `ContractVerifier` / `ContractVerification` / `CaseResult` | 对单个实现执行全部用例，失败时携带用例名、期望与实际值/实际异常 |
+| `ContractSuite` | 登记契约与实现清单，`verifyAll()` 跑全部组合并留存记录 |
+| `CoverageReport` | 每个 契约×实现 的通过/失败/未执行用例数；识别漏测与版本过期 |
+| `ConsistencyReport` | 跨实现一致性：同一用例的返回值或异常类型必须一致，不一致时输出各实现实际行为 |
+| `ContractStatistics` | 契约数、实现数、执行组合数、不满足项（失败用例 + 漏测 + 版本过期） |
+
+示例：
+
+```java
+Contract<TextProcessor, String, String> contract =
+        Contract.<TextProcessor, String, String>define("text-processor", TextProcessor::process)
+                .version(1)
+                .caseValue("trims and uppercases", "  hello  ", "HELLO")
+                .caseException("blank input rejected", "   ", IllegalArgumentException.class)
+                .build();
+
+ContractSuite suite = new ContractSuite()
+        .registerContract(contract)
+        .registerImplementation("standard", new StandardTextProcessor())
+        .registerImplementation("legacy", new LegacyTextProcessor());
+
+suite.verifyAll();
+System.out.println(suite.coverageReport().render());
+System.out.println(suite.consistencyReport("text-processor").render());
+System.out.println(suite.statistics().render());
+```
+
+契约升级时以同名 `registerContract` 注册新版本即可，未重新验证的实现会在覆盖报告中标记为「版本过期」。测试侧 `support/ContractDynamicTests` 可把用例展开为 JUnit 5 `@TestFactory` 动态测试，在 IDE/报告中按用例定位失败。
